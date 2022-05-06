@@ -1,0 +1,439 @@
+#######################################################
+#-----------------------------------------------------#
+# This program is intended for educational and practical 
+# purposes. Created as an example for interlinking MongoDB
+# to python for Revature technical training.
+#
+# Functionality:
+# Pulls from time table data base stored in mongo; this
+# program allows you to easily track and update where all 
+# of your scheduled time goes via inserting the hours
+# and minutes and appending the respective fields.
+#
+# Author: V Draco - (Sam Butchko - legal name subject to change)
+#-----------------------------------------------------#
+#######################################################
+import pymongo
+from pymongo import MongoClient
+import datetime
+
+import matplotlib.pyplot as plt
+
+######################################################
+# This displays the main menu for the application 
+# gives us main options w/ what we want to do 
+#
+# Arguments : NA
+# Returns : NA
+######################################################
+def displayStart():
+  print("Hello V. . .")
+  print("Today is ", (datetime.date.today()))
+  print()
+  print("Your current accessible fields are. . .")
+  print()
+ 
+  return
+######################################################
+
+#----------------------------------------------------#
+# Sub menu for display help: 
+# will give all of the available operations for the 
+# program.
+#----------------------------------------------------#
+def displayHelp():
+  print('This program is used to keep track of your daily time spent in certain fields...')
+  print()
+  print('Program options:')
+  print('i : Insert x amount of fields into the database for the current year. Be sure the names match! If a new name')
+  print('    is found, the respective field will be added to the database.')
+  print('q : Query the current years values. Returns the list of all current fields and values associated')
+  print('d : Deletes a specified field. CAREFUL ACTION IS PERMANENT!')
+  print('o : Overwrites or adjusts a specified field with a new value specified. CAREFUL ACTION IS PERMANENT!')
+  print('v : View - creates a pie plot of the available fields.')
+  print()
+  
+  return
+#----------------------------------------------------#
+
+######################################################
+# Displays the menu for home or the return base state.
+#
+# Arguments : NA
+# Returns : NA
+######################################################
+def displayMenu():
+  print('___Main Menu___')
+  print()
+  print('i : Insert new data and update table')
+  print('q : Query current fields / times')
+  print('e : Exit program')
+  print()
+  print('h : For more options and description.')
+  print('_______________')
+
+  select = input('Input Option: ')
+
+  return select
+######################################################
+
+
+
+######################################################
+# Retrieve all of the new fields from the user. After they havent
+# finished inputing them all. Write the update to the 
+# database using the helper updateDB. And return the updated fields 
+# list.
+#
+# Arguments : dbName - name of the database
+#             coName - name of the years collection 
+# Returns : The updated list of fields after user additions 
+######################################################
+def getNewFields(fields, dbName, coName):
+  
+  done = False      #Are we done getting input?
+  curField = []     #curField input['fieldName', hours.minutes]  
+  readName = ' '
+  
+  print('Type \'done\' and press enter to finish.')
+  print()
+  print('Please insert one field at a time in format of. . .')
+  print('Input -> fieldName, followed by enter')
+  print('Then input -> hours.minutes, followed by enter')
+  print()
+  print('Repeat untill finished then insert \'done\'')
+  
+  input_fields = [ ]
+  
+  while done == False:
+    
+    if(readName == 'done'):
+      done = True
+      continue  #done so stop getting new input 
+    else:
+      readName = input('Field Name? ')
+      if(readName == 'done'):
+        done = True 
+        continue
+      else:
+        readTime = float(input('Time HH:MM? '))
+    
+    curField.append(readName)           #['activityName'] *This was done in this fassion to avoid processing of regex -> this is faster
+    curField.append(readTime)           #['activityName', HH.MM]
+    input_fields.append(curField)       #add to inputs [[activityName, HH.MM], [], []. . . ]
+    curField = []                       #reset current field to empty
+  
+  fields = updateDB(fields, input_fields, dbName, coName)
+
+  return fields
+###################################################### 
+
+
+
+######################################################
+# Designed as a helper for getNewFields...
+# This is used to loop thru the current database and the 
+# respective fields for the years collection 
+# if the field exists already it adds the time to the current 
+# cumulative time. If it does not exist... make it.
+#
+# Arguments : input_fields : current list of fields
+#             dbName : name of database
+#             coName : name of the collection for the current year
+# Returns : links the pullDB() - so we are sure the DB list is up to date 
+######################################################
+def updateDB(fields, input_fields, dbName, coName):
+  
+  curF = ' '    #current field trying to be updated or appended 
+  curT = 0      #current time trying to be added in update 
+  newT = 0      #new time - correct for post update 
+
+  client = pymongo.MongoClient(mongoHost, mongoPort)
+  collection = client[dbName][coName]
+  
+  #Loop thru every new input field and add it to current time 
+  #If it does not yet exist - create new field
+  for field in input_fields:
+    
+    set = False
+    curF = field[0]
+    curT = float(field[1])
+    print('current field : ', curF)
+    print('current time  : ', curT)
+    
+    for f in fields:
+      if curF in f:
+        newT = curT + f[1]                  #add the new time to the stored time
+        query = { curF : f[1] }
+        newT = {"$set": {curF : newT}}
+        collection.update_one(query, newT)   #store new time
+        set = True        
+        break
+      else:
+        continue
+        
+      #end for 
+        
+    #if it doesnt exist create a new field w/ the specified time 
+    if(set == False): 
+      collection.insert_one( {curF: curT} )
+    else:
+      set = False
+                
+  #end for------------------------------
+  
+  return (pullDB(dbName, coName))
+######################################################
+
+
+
+######################################################
+# Retrieves a list of the most up to date collection of 
+# times for the current year
+#
+# Arguments : dbName - name of data base
+#             coName - name of the current collection for the current year
+# Returns : list of the documents in collection 
+######################################################  
+def pullDB(dbName, coName):
+
+  #set the client 
+  client = pymongo.MongoClient(mongoHost, mongoPort)  
+  print(client)
+
+  #get collection data
+  collection = client[dbName][coName]
+  fields = collection.find()
+
+  temp = []
+
+  fL = [ ]
+  for field in fields:
+    temp.append( list(field.keys())[1] )   #field name 
+    temp.append( list(field.values())[1] )  #current time stored 
+    fL.append(temp)                         #add [['fName', HH.MM], [], []. . .]
+    temp = []                               #reset 
+
+  printFields(fL)
+
+  return fL
+######################################################
+
+
+
+######################################################
+# Permanantley deletes a field and it's respective data
+# from the collection where it is found.
+# Be CAREFUL this is permanent!!! Ask are you sure?
+#
+# Arguments : the current fields list
+# Returns : new fields list updated 
+######################################################
+def deleteField(fields, dbName, coName):
+  print('*** CAUTION!!! ***')
+  print('You are now in delete mode.')
+  print('Changes you make here will be permanent!')
+  print()
+  print('To delete enter the desired field as:')
+  print('\'fieldName\' exactly as it appears in the data base.')
+  print()
+  print('Only 1 field may be deleted at a time.')
+  print()
+  print('Enter \'done\' to finish. . .')
+  
+  client = pymongo.MongoClient(mongoHost, mongoPort)
+  collection = client[dbName][coName]
+  
+  done = False      #flag for exiting delete mode  
+  readName = ' '
+  
+  while done == False:
+    
+    if(readName == 'done'):
+      done = True
+      continue  #done so stop getting new input 
+    
+    else:
+      readName = input('Field to delete: ')
+      if(readName == 'done'):
+        done = True
+        continue 
+        
+      #delete the specified field 
+      else:
+        for field in fields:
+          if(readName in field):
+            readT = field[1]
+        print(readT)    
+        collection.delete_one( {readName: readT} )
+        print(readName, 'removed successfully')
+  
+  print('\n Updated fields are:')
+  
+  return pullDB(dbName, coName)
+######################################################
+
+
+
+######################################################
+# Overrides or writes a new value to a specific 
+# time field. This is a force overwrite SO BE CAREFUL!
+# - ask if you are sure?
+#
+# Arguments : the current fields list
+# Returns : the updated fields list 
+######################################################
+def overrideField(fields, dbName, coName):
+  print('*** CAUTION!!! ***')
+  print('You are now in override mode.')
+  print('Changes you make here will be permanent!')
+  print()
+  print('To override enter the desired field as:')
+  print('\'fieldName\' : corrected HH.MM exactly as it appears in the data base.')
+  print()
+  print('Only 1 field may be overwritten at a time.')
+  print()
+  print('Enter \'done\' to finish. . .')
+  
+  client = pymongo.MongoClient(mongoHost, mongoPort)
+  collection = client[dbName][coName]
+  
+  done = False      #flag for exiting delete mode  
+  readName = ' '
+  
+  while done == False:
+    
+    if(readName == 'done'):
+      done = True
+      continue  #done so stop getting new input 
+    
+    else:
+      readName = input('Field to override: ')
+      if(readName == 'done'):
+        done = True
+        continue
+      else:        
+        readTime = float(input('Corrected time: '))
+
+        #update the specified field     
+        for field in fields:
+          if(readName in field):
+            readT = field[1]
+        collection.update_one( {readName: readT}, {"$set":{readName: readTime}}, upsert=True )
+        print(readName, 'updated successfully\n')
+  
+  print('\n Updated fields are:')
+  
+  return pullDB(dbName, coName)
+######################################################
+
+
+
+######################################################
+# Plot out the current field list with a pie chart
+#
+# Args : NA
+# Returns : NA
+######################################################
+def view(fields):
+  print('Ohhh nooooo UwU.... 404!')
+  print('we havent coded this yet 0.0! sowwy')
+  print('monkey go slap keyboard now')
+  
+  labels = []
+  qty = []
+  
+  for field in fields:
+    labels.append(field[0])
+    qty.append(field[1])
+    
+  fig1, ax1 = plt.subplots()
+  ax1.pie(qty, labels=labels, autopct='%1.1f%%', shadow=True, startangle=90)
+  ax1.axis('equal')
+  
+  plt.show()
+  
+  return
+######################################################
+
+
+
+######################################################
+# Responsible for printing a list of the fields.
+# i.e. this should only ever be printing the pulledDB
+# fields that are created as a nested list.
+#
+# Args : fields - the created fields list from pullDB
+# Returns : NA
+######################################################
+def printFields(fields):
+  
+  for field in fields:
+    print(field)
+  
+  print()  #clean spacing
+  
+  return
+######################################################
+
+
+
+#----------------------MAIN--------------------------#
+if __name__ == '__main__':
+
+  #variable declaration 
+  select = 0
+  exitF = False                 #Flag to exit program from user menu
+  fields = []                   #INIT database list of return 
+
+  mongoHost = 'localhost'       #local machine is running mongoDB
+  mongoPort = 27017             #Port of that server 
+  mongoName = 'timeKeeper'      #name of the database to be using 
+  mongoColl = 'data2022'        #name of collection to be using
+
+  #start the program and display 
+  displayStart()
+
+  #get the current mongoDB fields we wanna use. 
+  fields = pullDB(mongoName, mongoColl)
+
+  #menu cycle -----
+  while(exitF == False):
+  
+    if(exitF == False):
+      select = displayMenu()
+    
+    #insert an update 
+    if (select == 'i'):
+     fields = getNewFields(fields, mongoName, mongoColl)
+
+    #display time fields for DB in use
+    elif (select == 'q'):
+      pullDB(mongoName, mongoColl)
+      
+    #delete a field in the time table
+    elif (select == 'd'):
+      fields = deleteField(fields, mongoName, mongoColl)
+      
+    #override a field in the time table 
+    elif (select == 'o'):
+      fields = overrideField(fields, mongoName, mongoColl)
+      
+    #current pie chart plot 
+    elif (select == 'v'):
+      view(fields)
+      
+    #help menu
+    elif (select == 'h'):
+      displayHelp()
+    
+    #exit program
+    elif (select == 'e'):
+      exitF = True
+ 
+    elif (exitF == True):
+      continue
+      
+    else:
+      print('sorry input not valid : use h for more options')
+  #menu cycle -----
